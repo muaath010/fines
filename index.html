@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
     <title>نعاون - نظام إدارة المخالفات</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
@@ -85,15 +85,16 @@
             font-weight: bold;
         }
 
-        /* إضافة font-size: 16px يمنع هواتف أيفون وأندرويد من عمل زوم عند الضغط */
-        input, textarea {
+        /* الحل الجذري الثاني لمنع الزوم: font-size: 16px إجباري وإلغاء تأثير النقر المزدوج */
+        input, textarea, select {
             width: 100%;
             padding: 12px;
             border: 1px solid #ddd;
             border-radius: 8px;
             box-sizing: border-box;
             font-family: inherit;
-            font-size: 16px; 
+            font-size: 16px !important; 
+            touch-action: manipulation; 
             transition: 0.3s;
         }
 
@@ -176,8 +177,8 @@
                 <input type="text" id="captainName" required placeholder="أدخل اسم المندوب">
             </div>
             <div class="form-group">
-                <label>رقم هاتف المندوب</label>
-                <input type="tel" id="captainPhone" required placeholder="اختر من جهات الاتصال أو الصق الرقم" autocomplete="tel" oninput="cleanPhoneNumber(this)">
+                <label>رقم هاتف المندوب (الصق الرقم هنا)</label>
+                <input type="tel" id="captainPhone" required placeholder="يمكنك لصق الرقم من جهات الاتصال" autocomplete="tel" oninput="cleanPhoneNumber(this)">
             </div>
             <div class="form-group">
                 <label>تاريخ المخالفة</label>
@@ -235,25 +236,22 @@
 </div>
 
 <script>
-    // ضع رابط الـ Web App الخاص بـ Google Apps Script هنا
+    // ========= ضع رابط سيرفر جوجل الخاص بك هنا =========
     const GAS_URL = "https://script.google.com/macros/s/AKfycbzjoY4mXpRrwG1i1i0c2v6pifvW4j2GRFAtEhkMbQWf1c_WQzKnKLvwheVPpP8SIafyuw/exec";
+    // ===================================================
 
     let isStatsLoaded = false;
 
-    // تنظيف رقم الهاتف تلقائياً عند اللصق أو الاختيار
+    // دالة تنظيف رقم الهاتف المنسوخ ليكون 8 أرقام فقط
     function cleanPhoneNumber(input) {
-        // إزالة أي رموز أو مسافات (إبقاء الأرقام فقط)
-        let val = input.value.replace(/\D/g, '');
-        // إذا كان الرقم يبدأ بمفتاح عمان (968 أو 00968) يتم قصه
+        let val = input.value.replace(/\D/g, ''); // إزالة الحروف والرموز
         if (val.startsWith('00968')) val = val.substring(5);
         if (val.startsWith('968') && val.length > 8) val = val.substring(3);
-        // قص الرقم ليكون 8 أرقام كحد أقصى
         if (val.length > 8) val = val.substring(0, 8);
-        
         input.value = val;
     }
 
-    // جلب الإحصائيات في الخلفية بمجرد فتح الصفحة لتكون جاهزة وفورية
+    // جلب البيانات مسبقاً في الخلفية بمجرد فتح الصفحة
     window.onload = () => {
         document.getElementById('violationDate').valueAsDate = new Date();
         fetchStatsBackground();
@@ -295,13 +293,12 @@
         document.getElementById(tabId).classList.add('active');
         event.target.classList.add('active');
         
-        // إذا ضغط المستخدم على التقرير ولم يكتمل التحميل المخفي، إظهار علامة التحميل
         if(tabId === 'reportTab' && !isStatsLoaded) {
             document.getElementById('reportLoading').style.display = 'block';
         }
     }
 
-    // إرسال البيانات
+    // إرسال البيانات ومعالجة الصور
     document.getElementById('violationForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         
@@ -348,11 +345,10 @@
             const result = await response.json();
             
             if(result.status === 'success') {
-                alert("تم التسجيل بنجاح وإرسال الإشعار (والصور إن وجدت) عبر UltraMsg!");
+                alert("تم التسجيل بنجاح وإرسال الإشعار!");
                 document.getElementById('violationForm').reset();
-                document.getElementById('violationDate').valueAsDate = new Date(); // إعادة تعيين التاريخ لليوم
-                // تحديث الإحصائيات في الخلفية بعد إضافة مخالفة جديدة
-                fetchStatsBackground();
+                document.getElementById('violationDate').valueAsDate = new Date(); 
+                fetchStatsBackground(); // تحديث الإحصائيات في الخلفية
             } else {
                 alert("حدث خطأ: " + result.message);
             }
@@ -364,7 +360,7 @@
         }
     });
 
-    // استخراج PDF باحترافية
+    // استخراج التقرير كملف PDF
     function generatePDF() {
         const element = document.getElementById('reportContent');
         const opt = {
@@ -373,12 +369,12 @@
             image:        { type: 'jpeg', quality: 0.98 },
             html2canvas:  { scale: 2 },
             jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-            pagebreak:    { mode: 'avoid-all' }
+            pagebreak:    { mode: 'avoid-all' } // يمنع انقسام الكلام بين الصفحات
         };
         html2pdf().set(opt).from(element).save();
     }
 
-    // دالة مساعدة لتحويل الصورة
+    // تحويل الصورة برمجياً
     function getBase64(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
