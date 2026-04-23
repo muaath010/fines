@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>نعاون - نظام إدارة المخالفات</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
@@ -85,6 +85,7 @@
             font-weight: bold;
         }
 
+        /* إضافة font-size: 16px يمنع هواتف أيفون وأندرويد من عمل زوم عند الضغط */
         input, textarea {
             width: 100%;
             padding: 12px;
@@ -92,6 +93,7 @@
             border-radius: 8px;
             box-sizing: border-box;
             font-family: inherit;
+            font-size: 16px; 
             transition: 0.3s;
         }
 
@@ -164,7 +166,7 @@
 
     <div class="tabs">
         <button class="tab-btn active" onclick="switchTab('formTab')">تسجيل مخالفة</button>
-        <button class="tab-btn" onclick="switchTab('reportTab'); fetchStats();">التقارير والإحصائيات</button>
+        <button class="tab-btn" onclick="switchTab('reportTab')">التقارير والإحصائيات</button>
     </div>
 
     <div id="formTab" class="card active">
@@ -174,8 +176,8 @@
                 <input type="text" id="captainName" required placeholder="أدخل اسم المندوب">
             </div>
             <div class="form-group">
-                <label>رقم هاتف المندوب (8 أرقام فقط)</label>
-                <input type="tel" id="captainPhone" required pattern="[0-9]{8}" placeholder="مثال: 9XXXXXXX">
+                <label>رقم هاتف المندوب</label>
+                <input type="tel" id="captainPhone" required placeholder="اختر من جهات الاتصال أو الصق الرقم" autocomplete="tel" oninput="cleanPhoneNumber(this)">
             </div>
             <div class="form-group">
                 <label>تاريخ المخالفة</label>
@@ -222,19 +224,69 @@
                         <th>إجمالي الغرامات</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="statsTableBody">
                     </tbody>
             </table>
         </div>
         <button class="btn-submit" onclick="generatePDF()" style="margin-top: 20px;">استخراج التقرير PDF</button>
-        <div id="reportLoading" class="loading" style="display:block;">جاري جلب البيانات من الخادم...</div>
+        <div id="reportLoading" class="loading" style="display:block;">جاري تجهيز البيانات السريعة...</div>
     </div>
 
 </div>
 
 <script>
     // ضع رابط الـ Web App الخاص بـ Google Apps Script هنا
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbyk55LRfghZGlspZFshUt6nYRCkDhbdyOu9pOOr5E9w_x4tUbEwCMMyWD-2CiRz-KOItA/exec";
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbzjoY4mXpRrwG1i1i0c2v6pifvW4j2GRFAtEhkMbQWf1c_WQzKnKLvwheVPpP8SIafyuw/exec";
+
+    let isStatsLoaded = false;
+
+    // تنظيف رقم الهاتف تلقائياً عند اللصق أو الاختيار
+    function cleanPhoneNumber(input) {
+        // إزالة أي رموز أو مسافات (إبقاء الأرقام فقط)
+        let val = input.value.replace(/\D/g, '');
+        // إذا كان الرقم يبدأ بمفتاح عمان (968 أو 00968) يتم قصه
+        if (val.startsWith('00968')) val = val.substring(5);
+        if (val.startsWith('968') && val.length > 8) val = val.substring(3);
+        // قص الرقم ليكون 8 أرقام كحد أقصى
+        if (val.length > 8) val = val.substring(0, 8);
+        
+        input.value = val;
+    }
+
+    // جلب الإحصائيات في الخلفية بمجرد فتح الصفحة لتكون جاهزة وفورية
+    window.onload = () => {
+        document.getElementById('violationDate').valueAsDate = new Date();
+        fetchStatsBackground();
+    };
+
+    async function fetchStatsBackground() {
+        try {
+            const response = await fetch(GAS_URL + "?action=getStats");
+            const data = await response.json();
+            
+            const tbody = document.getElementById('statsTableBody');
+            tbody.innerHTML = '';
+            
+            let topViolator = { name: "لا يوجد", count: 0 };
+
+            for (const [name, stats] of Object.entries(data.captains)) {
+                if(stats.count > topViolator.count) {
+                    topViolator = { name: name, count: stats.count };
+                }
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${name}</td><td>${stats.count}</td><td>${stats.totalFines} ر.ع</td>`;
+                tbody.appendChild(tr);
+            }
+
+            document.getElementById('topViolatorName').innerText = topViolator.name;
+            document.getElementById('topViolatorCount').innerText = topViolator.count;
+            isStatsLoaded = true;
+            document.getElementById('reportLoading').style.display = 'none';
+        } catch (error) {
+            console.error("لم يتم جلب البيانات مسبقاً", error);
+            document.getElementById('reportLoading').innerText = "فشل جلب البيانات، حاول مجدداً.";
+        }
+    }
 
     // التنقل بين النوافذ
     function switchTab(tabId) {
@@ -242,6 +294,11 @@
         document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
         document.getElementById(tabId).classList.add('active');
         event.target.classList.add('active');
+        
+        // إذا ضغط المستخدم على التقرير ولم يكتمل التحميل المخفي، إظهار علامة التحميل
+        if(tabId === 'reportTab' && !isStatsLoaded) {
+            document.getElementById('reportLoading').style.display = 'block';
+        }
     }
 
     // إرسال البيانات
@@ -250,7 +307,7 @@
         
         const phone = document.getElementById('captainPhone').value;
         if(phone.length !== 8) {
-            alert("الرجاء إدخال رقم هاتف مكون من 8 أرقام فقط.");
+            alert("الرجاء التأكد من أن رقم الهاتف يتكون من 8 أرقام فقط.");
             return;
         }
 
@@ -293,6 +350,9 @@
             if(result.status === 'success') {
                 alert("تم التسجيل بنجاح وإرسال الإشعار (والصور إن وجدت) عبر UltraMsg!");
                 document.getElementById('violationForm').reset();
+                document.getElementById('violationDate').valueAsDate = new Date(); // إعادة تعيين التاريخ لليوم
+                // تحديث الإحصائيات في الخلفية بعد إضافة مخالفة جديدة
+                fetchStatsBackground();
             } else {
                 alert("حدث خطأ: " + result.message);
             }
@@ -303,38 +363,6 @@
             document.querySelector('.btn-submit').disabled = false;
         }
     });
-
-    // جلب الإحصائيات للتقرير
-    async function fetchStats() {
-        document.getElementById('reportLoading').style.display = 'block';
-        try {
-            const response = await fetch(GAS_URL + "?action=getStats");
-            const data = await response.json();
-            
-            const tbody = document.querySelector('#statsTable tbody');
-            tbody.innerHTML = '';
-            
-            let topViolator = { name: "لا يوجد", count: 0 };
-
-            for (const [name, stats] of Object.entries(data.captains)) {
-                if(stats.count > topViolator.count) {
-                    topViolator = { name: name, count: stats.count };
-                }
-                const tr = document.createElement('tr');
-                tr.innerHTML = `<td>${name}</td><td>${stats.count}</td><td>${stats.totalFines} ر.ع</td>`;
-                tbody.appendChild(tr);
-            }
-
-            document.getElementById('topViolatorName').innerText = topViolator.name;
-            document.getElementById('topViolatorCount').innerText = topViolator.count;
-            
-        } catch (error) {
-            console.error(error);
-            alert("فشل جلب الإحصائيات.");
-        } finally {
-            document.getElementById('reportLoading').style.display = 'none';
-        }
-    }
 
     // استخراج PDF باحترافية
     function generatePDF() {
