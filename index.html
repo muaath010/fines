@@ -178,6 +178,22 @@
                     <option value="" disabled selected>⏳ جاري تحميل قائمة المندوبين...</option>
                 </select>
                 <input type="hidden" id="captainName">
+                
+                <button type="button" onclick="toggleAddDriverForm()" style="background: none; border: none; color: var(--primary-gold); text-decoration: underline; cursor: pointer; padding: 0; font-size: 14px; margin-top: 8px; font-weight: bold;">➕ إضافة مندوب جديد للنظام</button>
+            </div>
+            
+            <div id="addDriverSection" style="display: none; background: #fdfaf0; padding: 15px; border-radius: 8px; border: 1px dashed var(--primary-gold); margin-bottom: 20px;">
+                <h4 style="margin-top: 0; color: var(--dark-gold);">تسجيل مندوب جديد في قاعدة البيانات</h4>
+                <div class="form-group">
+                    <label>اسم المندوب الثلاثي</label>
+                    <input type="text" id="newDriverName" placeholder="اكتب اسم المندوب الكامل">
+                </div>
+                <div class="form-group">
+                    <label>رقم هاتف المندوب (8 أرقام)</label>
+                    <input type="tel" id="newDriverPhone" placeholder="مثال: 90000000" oninput="cleanPhoneNumber(this)">
+                </div>
+                <button type="button" onclick="submitNewDriver()" class="btn-submit" style="padding: 8px; font-size: 14px; background-color: var(--dark-gold);">حفظ المندوب الجديد</button>
+                <div id="addDriverLoading" class="loading" style="font-size: 14px;">جاري حفظ المندوب وتحديث القائمة...</div>
             </div>
             
             <div class="form-group">
@@ -246,10 +262,66 @@
 
 <script>
     // ========= رابط سيرفر جوجل الخاص بك =========
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbw-JJq4D0RUpuQpMnHConf2siAf0F9zU5GrSAey9Fge7BRPblwDTvW45inmBW96wfNOJw/exec";
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbypbKJIgEllDUAyjys3LZ1ChKe9ulZumkI7R3Qu9fLMquPDQ-ggzOeaxW_KOh63vvdg4g/exec";
     // ===========================================
 
     let isStatsLoaded = false;
+
+    // تنظيف رقم الهاتف المدخل يدوياً للمندوب الجديد
+    function cleanPhoneNumber(input) {
+        let val = input.value.replace(/\D/g, ''); 
+        if (val.length > 8) val = val.substring(0, 8);
+        input.value = val;
+    }
+
+    // إظهار وإخفاء نموذج إضافة المندوب
+    function toggleAddDriverForm() {
+        const section = document.getElementById('addDriverSection');
+        section.style.display = section.style.display === 'none' ? 'block' : 'none';
+    }
+
+    // إرسال المندوب الجديد لقاعدة البيانات
+    async function submitNewDriver() {
+        const name = document.getElementById('newDriverName').value.trim();
+        const phone = document.getElementById('newDriverPhone').value.trim();
+        const loading = document.getElementById('addDriverLoading');
+
+        if(!name || phone.length !== 8) {
+            alert("الرجاء التأكد من كتابة الاسم، وأن رقم الهاتف يتكون من 8 أرقام.");
+            return;
+        }
+
+        loading.style.display = 'block';
+
+        const payload = {
+            action: "addDriver",
+            driverName: name,
+            driverPhone: phone
+        };
+
+        try {
+            const response = await fetch(GAS_URL, {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+
+            if(result.status === 'success') {
+                alert("تم حفظ المندوب الجديد في قاعدة البيانات بنجاح! ✅");
+                document.getElementById('newDriverName').value = '';
+                document.getElementById('newDriverPhone').value = '';
+                toggleAddDriverForm();
+                // تحديث القائمة المنسدلة فوراً لجلب الاسم الجديد
+                await fetchDriversList();
+            } else {
+                alert("حدث خطأ: " + result.message);
+            }
+        } catch(error) {
+            alert("خطأ في الاتصال بالخادم لحفظ المندوب.");
+        } finally {
+            loading.style.display = 'none';
+        }
+    }
 
     // جلب قائمة المندوبين من قاعدة البيانات
     async function fetchDriversList() {
@@ -262,7 +334,6 @@
             
             drivers.sort((a, b) => a.name.localeCompare(b.name, 'ar')).forEach(driver => {
                 let option = document.createElement('option');
-                // إزالة أي رموز غير رقمية من الهاتف
                 option.value = driver.phone.toString().replace(/\D/g, ''); 
                 option.text = driver.name;
                 select.appendChild(option);
@@ -323,7 +394,7 @@
         document.querySelectorAll('.card').forEach(card => card.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
         document.getElementById(tabId).classList.add('active');
-        if (event) event.target.classList.add('active');
+        if (event && event.target.classList) event.target.classList.add('active');
         
         if(tabId === 'reportTab' && !isStatsLoaded) {
             document.getElementById('reportLoading').style.display = 'block';
@@ -335,7 +406,7 @@
         
         const phone = document.getElementById('captainPhone').value;
         if(!phone || phone.length < 8) {
-            alert("الرجاء اختيار مندوب صحيح.");
+            alert("الرجاء اختيار مندوب صحيح من القائمة.");
             return;
         }
 
