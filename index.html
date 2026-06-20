@@ -179,7 +179,7 @@
             color: white;
         }
 
-        /* تعديل جوهري لمنع قص الصفوف في الـ PDF */
+        /* منع قص الجداول بين الصفحات في الـ PDF */
         tr {
             page-break-inside: avoid;
         }
@@ -403,7 +403,7 @@
         fetchDriversList();
         fetchStatsBackground();
         
-        // استرجاع التبويب الأخير للحفاظ على مكانك بعد إغلاق الـ PDF
+        // استرجاع التبويب الأخير لمنع العودة للصفحة الرئيسية عند التحديث
         const savedTab = localStorage.getItem('activeTab_nawen');
         if (savedTab) {
             switchTab(savedTab);
@@ -483,7 +483,7 @@
     }
 
     function generateDriverPDF(event, driverName, driverPhone) {
-        if(event) event.preventDefault();
+        if(event) event.preventDefault(); // إيقاف سلوك تحديث الصفحة الإجباري
 
         const startVal = document.getElementById('filterStartDate').value;
         const endVal = document.getElementById('filterEndDate').value;
@@ -511,62 +511,59 @@
         else if (startVal) periodText = `من ${startVal} وحتى تاريخه`;
         else if (endVal) periodText = `حتى تاريخ ${endVal}`;
 
-        const printArea = document.createElement('div');
-        printArea.style.padding = "20px";
-        printArea.style.direction = "rtl";
-        printArea.style.fontFamily = "'Tajawal', sans-serif";
+        // الحل الجذري للصفحة البيضاء: تحويل الكود إلى نص HTML مقروء مباشرة لمكتبة PDF
+        const htmlContent = `
+            <div style="padding: 30px; direction: rtl; font-family: 'Tajawal', sans-serif; background: #fff; width: 100%; box-sizing: border-box;">
+                <div style="text-align: center; border-bottom: 3px solid #D4AF37; padding-bottom: 15px; margin-bottom: 20px;">
+                    <h1 style="color: #D4AF37; margin: 0 0 5px 0;">نعاون لخدمات التوصيل</h1>
+                    <h3 style="margin: 0; color: #333;">كشف بالمخالفات المفصلة للمندوب</h3>
+                </div>
+                
+                <div style="background: #F8F9FA; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; line-height: 1.6;">
+                    <p style="margin: 3px 0;"><strong>اسم المندوب:</strong> ${driverName}</p>
+                    <p style="margin: 3px 0;"><strong>رقم هاتف المندوب:</strong> ${driverPhone || 'غير متوفر'}</p>
+                    <p style="margin: 3px 0;"><strong>نطاق الفترة الزمنية:</strong> ${periodText}</p>
+                    <p style="margin: 3px 0;"><strong>إجمالي عدد المخالفات:</strong> ${driverViolations.length}</p>
+                    <p style="margin: 3px 0; color: #e74c3c; font-weight: bold;"><strong>إجمالي المبالغ والغرامات المستحقة:</strong> ${totalFines.toFixed(3)} ر.ع</p>
+                </div>
 
-        printArea.innerHTML = `
-            <div style="text-align: center; border-bottom: 3px solid #D4AF37; padding-bottom: 15px; margin-bottom: 20px;">
-                <h1 style="color: #D4AF37; margin: 0 0 5px 0;">نعاون لخدمات التوصيل</h1>
-                <h3 style="margin: 0; color: #333;">كشف بالمخالفات المفصلة للمندوب</h3>
-            </div>
-            
-            <div style="background: #F8F9FA; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; line-height: 1.6;">
-                <p style="margin: 3px 0;"><strong>اسم المندوب:</strong> ${driverName}</p>
-                <p style="margin: 3px 0;"><strong>رقم هاتف المندوب:</strong> ${driverPhone || 'غير متوفر'}</p>
-                <p style="margin: 3px 0;"><strong>نطاق الفترة الزمنية:</strong> ${periodText}</p>
-                <p style="margin: 3px 0;"><strong>إجمالي عدد المخالفات:</strong> ${driverViolations.length}</p>
-                <p style="margin: 3px 0; color: #e74c3c; font-weight: bold;"><strong>إجمالي المبالغ والغرامات المستحقة:</strong> ${totalFines.toFixed(3)} ر.ع</p>
-            </div>
-
-            <table style="width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px;">
-                <thead>
-                    <tr style="background-color: #D4AF37; color: white;">
-                        <th style="border: 1px solid #ddd; padding: 10px; text-align: right;">التاريخ</th>
-                        <th style="border: 1px solid #ddd; padding: 10px; text-align: right;">نوع المخالفة</th>
-                        <th style="border: 1px solid #ddd; padding: 10px; text-align: right;">مبلغ الغرامة</th>
-                        <th style="border: 1px solid #ddd; padding: 10px; text-align: right;">الملاحظات الإدارية</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${driverViolations.map(v => `
-                        <tr>
-                            <td style="border: 1px solid #ddd; padding: 10px;">${v.date}</td>
-                            <td style="border: 1px solid #ddd; padding: 10px;">${v.details}</td>
-                            <td style="border: 1px solid #ddd; padding: 10px; font-weight: bold; color: #e74c3c;">${parseFloat(v.fine).toFixed(3)} ر.ع</td>
-                            <td style="border: 1px solid #ddd; padding: 10px; color: #666;">${v.notes || '-'}</td>
+                <table style="width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px;">
+                    <thead>
+                        <tr style="background-color: #D4AF37; color: white;">
+                            <th style="border: 1px solid #ddd; padding: 10px; text-align: right;">التاريخ</th>
+                            <th style="border: 1px solid #ddd; padding: 10px; text-align: right;">نوع المخالفة</th>
+                            <th style="border: 1px solid #ddd; padding: 10px; text-align: right;">مبلغ الغرامة</th>
+                            <th style="border: 1px solid #ddd; padding: 10px; text-align: right;">الملاحظات الإدارية</th>
                         </tr>
-                    `).join('')}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        ${driverViolations.map(v => `
+                            <tr style="page-break-inside: avoid;">
+                                <td style="border: 1px solid #ddd; padding: 10px;">${v.date}</td>
+                                <td style="border: 1px solid #ddd; padding: 10px;">${v.details}</td>
+                                <td style="border: 1px solid #ddd; padding: 10px; font-weight: bold; color: #e74c3c;">${parseFloat(v.fine).toFixed(3)} ر.ع</td>
+                                <td style="border: 1px solid #ddd; padding: 10px; color: #666;">${v.notes || '-'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
 
-            <div style="margin-top: 40px; text-align: left; font-size: 11px; color: #999; border-top: 1px dashed #ddd; padding-top: 10px;">
-                <p>تم استخراج هذا المستند إلكترونياً من النظام الإداري الموحد لفريق نعاون.</p>
-                <p>تاريخ الطباعة والاستخراج: ${new Date().toLocaleDateString('ar-OM')}</p>
+                <div style="margin-top: 40px; text-align: right; font-size: 11px; color: #999; border-top: 1px dashed #ddd; padding-top: 10px;">
+                    <p>تم استخراج هذا المستند إلكترونياً من النظام الإداري الموحد لفريق نعاون.</p>
+                    <p>تاريخ الطباعة والاستخراج: ${new Date().toLocaleDateString('ar-OM')}</p>
+                </div>
             </div>
         `;
 
         const opt = {
-            margin: 10,
-            filename: `تقرير_مخالفات_المندوب_${driverName}.pdf`,
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-            pagebreak: { mode: ['css', 'legacy'] }
+            margin:       [10, 10, 10, 10], // إضافة هوامش لحماية التقرير من القص
+            filename:     `تقرير_مخالفات_المندوب_${driverName}.pdf`,
+            image:        { type: 'jpeg', quality: 1 },
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
-        html2pdf().set(opt).from(printArea).save();
+        html2pdf().set(opt).from(htmlContent).save();
     }
 
     function switchTab(tabId) {
@@ -575,14 +572,13 @@
         
         document.getElementById(tabId).classList.add('active');
         
-        // تعديل الزر النشط في الأعلى
         if (tabId === 'formTab') {
             document.querySelectorAll('.tab-btn')[0].classList.add('active');
         } else {
             document.querySelectorAll('.tab-btn')[1].classList.add('active');
         }
         
-        // حفظ التبويب الحالي في الذاكرة
+        // تخزين التبويب الحالي في الذاكرة
         localStorage.setItem('activeTab_nawen', tabId);
         
         if(tabId === 'reportTab' && !isStatsLoaded) {
@@ -653,15 +649,14 @@
     });
 
     function generatePDF(event) {
-        if(event) event.preventDefault();
+        if(event) event.preventDefault(); // إيقاف تحديث الصفحة للتقرير العام
         const element = document.getElementById('reportContent');
         const opt = {
-            margin: 10,
-            filename: 'تقرير_مخالفات_نعاون_العام.pdf',
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-            pagebreak: { mode: ['css', 'legacy'] }
+            margin:       [10, 10, 10, 10], // إضافة هوامش لحماية التقرير من القص
+            filename:     'تقرير_مخالفات_نعاون_العام.pdf',
+            image:        { type: 'jpeg', quality: 1 },
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
         html2pdf().set(opt).from(element).save();
     }
