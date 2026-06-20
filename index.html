@@ -80,6 +80,21 @@
             text-align: right;
         }
 
+        .filter-container {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(212, 175, 55, 0.2);
+        }
+
+        .filter-item {
+            flex: 1;
+            text-align: right;
+        }
+
         label {
             display: block;
             margin-bottom: 5px;
@@ -120,6 +135,22 @@
 
         .btn-submit:hover {
             background-color: var(--dark-gold);
+        }
+
+        .btn-pdf {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+
+        .btn-pdf:hover {
+            background-color: #c0392b;
         }
 
         .stats-box {
@@ -232,9 +263,21 @@
     </div>
 
     <div id="reportTab" class="card">
+        <div class="filter-container">
+            <div class="filter-item">
+                <label>من تاريخ:</label>
+                <input type="date" id="filterStartDate" onchange="filterStats()">
+            </div>
+            <div class="filter-item">
+                <label>إلى تاريخ:</label>
+                <input type="date" id="filterEndDate" onchange="filterStats()">
+            </div>
+        </div>
+
         <div id="reportContent">
             <div class="header">
                 <h2>تقرير المخالفات الرسمي - نعاون</h2>
+                <p id="selectedDateRange" style="font-weight: bold; color: var(--dark-gold); margin-top: -10px;"></p>
             </div>
             <div class="stats-box">
                 <h3>أكثر مندوب مخالف 🚨</h3>
@@ -248,13 +291,14 @@
                         <th>اسم المندوب</th>
                         <th>عدد المخالفات</th>
                         <th>إجمالي الغرامات</th>
+                        <th style="text-align: center;">التقرير المفصل</th>
                     </tr>
                 </thead>
                 <tbody id="statsTableBody">
                 </tbody>
             </table>
         </div>
-        <button class="btn-submit" onclick="generatePDF()" style="margin-top: 20px;">استخراج التقرير PDF</button>
+        <button class="btn-submit" onclick="generatePDF()" style="margin-top: 20px;">استخراج التقرير العام PDF</button>
         <div id="reportLoading" class="loading" style="display:block;">جاري تجهيز البيانات السريعة...</div>
     </div>
 
@@ -262,10 +306,11 @@
 
 <script>
     // ========= رابط سيرفر جوجل الخاص بك =========
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbzuAu3Wx5NQ9DErJojJoUjRTFHBgtr38ds_ZtY8ylliAsyL3B-HQQmTtPm-fEdY4LJUdA/exec";
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbzt47jqyInANtoKNqOlryCMxmcGHQqlHETc_Ire9XHyGlSGI1LUwpHFp0PV2MLI7Y_yXA/exec";
     // ===========================================
 
     let isStatsLoaded = false;
+    let allViolations = []; // مخزن لتأطير كل المخالفات الخام القادمة من السيرفر
 
     // تنظيف رقم الهاتف المدخل يدوياً للمندوب الجديد
     function cleanPhoneNumber(input) {
@@ -311,7 +356,6 @@
                 document.getElementById('newDriverName').value = '';
                 document.getElementById('newDriverPhone').value = '';
                 toggleAddDriverForm();
-                // تحديث القائمة المنسدلة فوراً لجلب الاسم الجديد
                 await fetchDriversList();
             } else {
                 alert("حدث خطأ: " + result.message);
@@ -361,33 +405,171 @@
         fetchStatsBackground();
     };
 
+    // جلب الإحصائيات الشاملة من قاعدة البيانات في الخلفية
     async function fetchStatsBackground() {
         try {
             const response = await fetch(GAS_URL + "?action=getStats");
             const data = await response.json();
             
-            const tbody = document.getElementById('statsTableBody');
-            tbody.innerHTML = '';
+            // تخزين المخالفات بصيغتها الكاملة لتسهيل التصفية بالتاريخ محلياً وبسرعة فائقة
+            allViolations = data.violations || [];
             
-            let topViolator = { name: "لا يوجد", count: 0 };
-
-            for (const [name, stats] of Object.entries(data.captains)) {
-                if(stats.count > topViolator.count) {
-                    topViolator = { name: name, count: stats.count };
-                }
-                const tr = document.createElement('tr');
-                tr.innerHTML = `<td>${name}</td><td>${stats.count}</td><td>${stats.totalFines} ر.ع</td>`;
-                tbody.appendChild(tr);
-            }
-
-            document.getElementById('topViolatorName').innerText = topViolator.name;
-            document.getElementById('topViolatorCount').innerText = topViolator.count;
             isStatsLoaded = true;
             document.getElementById('reportLoading').style.display = 'none';
+            
+            // تشغيل دالة التصفية والعرض التلقائي
+            filterStats();
         } catch (error) {
             console.error("لم يتم جلب البيانات مسبقاً", error);
             document.getElementById('reportLoading').innerText = "فشل جلب البيانات، حاول مجدداً.";
         }
+    }
+
+    // دالة التصفية بالتاريخ وإعادة بناء الجداول آلياً
+    function filterStats() {
+        const startVal = document.getElementById('filterStartDate').value;
+        const endVal = document.getElementById('filterEndDate').value;
+        const dateRangeLabel = document.getElementById('selectedDateRange');
+        
+        const startDate = startVal ? new Date(startVal) : null;
+        const endDate = endVal ? new Date(endVal) : null;
+        if (endDate) endDate.setHours(23, 59, 59, 999); // تضمين نهاية اليوم المحدد
+
+        // تحديث النص الظاهر للفترة الزمنية في التقرير
+        if (startVal && endVal) dateRangeLabel.innerText = `الفترة: من ${startVal} إلى ${endVal}`;
+        else if (startVal) dateRangeLabel.innerText = `الفترة: من ${startVal} وحتى الآن`;
+        else if (endVal) dateRangeLabel.innerText = `الفترة: حتى تاريخ ${endVal}`;
+        else dateRangeLabel.innerText = "عرض كامل الفترة الزمنية";
+
+        // تصفية المصفوفة بناءً على نطاق التاريخ المختار
+        const filteredViolations = allViolations.filter(v => {
+            const vDate = new Date(v.date);
+            if (startDate && vDate < startDate) return false;
+            if (endDate && vDate > endDate) return false;
+            return true;
+        });
+
+        // تجميع الإحصائيات للمناديب بناءً على البيانات المصفاة
+        const captainsMap = {};
+        filteredViolations.forEach(v => {
+            if (!captainsMap[v.name]) {
+                captainsMap[v.name] = { count: 0, totalFines: 0, phone: v.phone };
+            }
+            captainsMap[v.name].count += 1;
+            captainsMap[v.name].totalFines += parseFloat(v.fine) || 0;
+        });
+
+        const tbody = document.getElementById('statsTableBody');
+        tbody.innerHTML = '';
+        
+        let topViolator = { name: "لا يوجد", count: 0 };
+
+        for (const [name, stats] of Object.entries(captainsMap)) {
+            if(stats.count > topViolator.count) {
+                topViolator = { name: name, count: stats.count };
+            }
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${name}</td>
+                <td>${stats.count}</td>
+                <td>${stats.totalFines.toFixed(3)} ر.ع</td>
+                <td style="text-align: center;">
+                    <button type="button" class="btn-pdf" onclick="generateDriverPDF('${name}', '${stats.phone}')">تحميل PDF 📄</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        document.getElementById('topViolatorName').innerText = topViolator.name;
+        document.getElementById('topViolatorCount').innerText = topViolator.count;
+    }
+
+    // دالة استخراج ملف PDF مفصل وتفصيلي لمندوب معين بناءً على فترة التصفية
+    function generateDriverPDF(driverName, driverPhone) {
+        const startVal = document.getElementById('filterStartDate').value;
+        const endVal = document.getElementById('filterEndDate').value;
+        
+        const startDate = startVal ? new Date(startVal) : null;
+        const endDate = endVal ? new Date(endVal) : null;
+        if (endDate) endDate.setHours(23, 59, 59, 999);
+
+        // جلب مخالفات المندوب المحدد في هذه الفترة الزمنية
+        const driverViolations = allViolations.filter(v => {
+            if (v.name !== driverName) return false;
+            const vDate = new Date(v.date);
+            if (startDate && vDate < startDate) return false;
+            if (endDate && vDate > endDate) return false;
+            return true;
+        });
+
+        if(driverViolations.length === 0) {
+            alert("لا توجد مخالفات مسجلة لهذا المندوب خلال النطاق الزمني المحدد.");
+            return;
+        }
+
+        let totalFines = driverViolations.reduce((sum, v) => sum + (parseFloat(v.fine) || 0), 0);
+        let periodText = "كامل الفترة الزمنية";
+        if (startVal && endVal) periodText = `من ${startVal} إلى ${endVal}`;
+        else if (startVal) periodText = `من ${startVal} وحتى تاريخه`;
+        else if (endVal) periodText = `حتى تاريخ ${endVal}`;
+
+        // إنشاء هيكل تقرير الـ PDF المفصل داخل كود جافاسكريبت وتنسيقه بشكل راقٍ ومستقل
+        const printArea = document.createElement('div');
+        printArea.style.padding = "20px";
+        printArea.style.direction = "rtl";
+        printArea.style.fontFamily = "'Tajawal', sans-serif";
+
+        printArea.innerHTML = `
+            <div style="text-align: center; border-bottom: 3px solid #D4AF37; padding-bottom: 15px; margin-bottom: 20px;">
+                <h1 style="color: #D4AF37; margin: 0 0 5px 0;">نعاون لخدمات التوصيل</h1>
+                <h3 style="margin: 0; color: #333;">كشف بالمخالفات المفصلة للمندوب</h3>
+            </div>
+            
+            <div style="background: #F8F9FA; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; line-height: 1.6;">
+                <p style="margin: 3px 0;"><strong>اسم المندوب:</strong> ${driverName}</p>
+                <p style="margin: 3px 0;"><strong>رقم هاتف المندوب:</strong> ${driverPhone || 'غير متوفر'}</p>
+                <p style="margin: 3px 0;"><strong>نطاق الفترة الزمنية:</strong> ${periodText}</p>
+                <p style="margin: 3px 0;"><strong>إجمالي عدد المخالفات:</strong> ${driverViolations.length}</p>
+                <p style="margin: 3px 0; color: #e74c3c; font-weight: bold;"><strong>إجمالي المبالغ والغرامات المستحقة:</strong> ${totalFines.toFixed(3)} ر.ع</p>
+            </div>
+
+            <table style="width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px;">
+                <thead>
+                    <tr style="background-color: #D4AF37; color: white;">
+                        <th style="border: 1px solid #ddd; padding: 10px; text-align: right;">التاريخ</th>
+                        <th style="border: 1px solid #ddd; padding: 10px; text-align: right;">نوع المخالفة</th>
+                        <th style="border: 1px solid #ddd; padding: 10px; text-align: right;">مبلغ الغرامة</th>
+                        <th style="border: 1px solid #ddd; padding: 10px; text-align: right;">الملاحظات الإدارية</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${driverViolations.map(v => `
+                        <tr>
+                            <td style="border: 1px solid #ddd; padding: 10px;">${v.date}</td>
+                            <td style="border: 1px solid #ddd; padding: 10px;">${v.details}</td>
+                            <td style="border: 1px solid #ddd; padding: 10px; font-weight: bold; color: #e74c3c;">${parseFloat(v.fine).toFixed(3)} ر.ع</td>
+                            <td style="border: 1px solid #ddd; padding: 10px; color: #666;">${v.notes || '-'}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+
+            <div style="margin-top: 40px; text-align: left; font-size: 11px; color: #999; border-top: 1px dashed #ddd; padding-top: 10px;">
+                <p>تم استخراج هذا المستند إلكترونياً من النظام الإداري الموحد لفريق نعاون.</p>
+                <p>تاريخ الطباعة والاستخراج: ${new Date().toLocaleDateString('ar-OM')}</p>
+            </div>
+        `;
+
+        const opt = {
+            margin: 10,
+            filename: `تقرير_مخالفات_المندوب_${driverName}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            pagebreak: { mode: 'avoid-all' }
+        };
+
+        html2pdf().set(opt).from(printArea).save();
     }
 
     function switchTab(tabId) {
@@ -406,7 +588,7 @@
         
         const phone = document.getElementById('captainPhone').value;
         if(!phone || phone.length < 8) {
-            alert("الرجاء اختيار مندوب صحيح من القائمة.");
+            alert("الرجاء اختيار مندوب صحيح.");
             return;
         }
 
@@ -467,7 +649,7 @@
         const element = document.getElementById('reportContent');
         const opt = {
             margin: 10,
-            filename: 'تقرير_مخالفات_نعاون.pdf',
+            filename: 'تقرير_مخالفات_نعاون العام.pdf',
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: { scale: 2 },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
