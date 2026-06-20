@@ -162,27 +162,33 @@
             border: 1px solid var(--primary-gold);
         }
 
+        /* --- الحل الجذري لمنع قص الجداول في الـ PDF --- */
         table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
+            page-break-inside: auto; 
         }
-
+        tr {
+            page-break-inside: avoid; 
+            page-break-after: auto;
+        }
+        thead {
+            display: table-header-group;
+        }
+        tfoot {
+            display: table-footer-group;
+        }
         th, td {
             border: 1px solid #ddd;
             padding: 12px;
             text-align: right;
         }
-
         th {
             background-color: var(--primary-gold);
             color: white;
         }
-
-        /* منع قص الجداول بين الصفحات في الـ PDF */
-        tr {
-            page-break-inside: avoid;
-        }
+        /* ------------------------------------------- */
 
         .loading {
             display: none;
@@ -294,8 +300,8 @@
                 <thead>
                     <tr>
                         <th>اسم المندوب</th>
-                        <th>عدد المخالفات</th>
-                        <th>إجمالي الغرامات</th>
+                        <th>المخالفات</th>
+                        <th>الغرامات</th>
                         <th style="text-align: center;">التقرير المفصل</th>
                     </tr>
                 </thead>
@@ -347,10 +353,7 @@
         };
 
         try {
-            const response = await fetch(GAS_URL, {
-                method: 'POST',
-                body: JSON.stringify(payload)
-            });
+            const response = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
             const result = await response.json();
 
             if(result.status === 'success') {
@@ -403,7 +406,6 @@
         fetchDriversList();
         fetchStatsBackground();
         
-        // استرجاع التبويب الأخير لمنع العودة للصفحة الرئيسية عند التحديث
         const savedTab = localStorage.getItem('activeTab_nawen');
         if (savedTab) {
             switchTab(savedTab);
@@ -416,7 +418,6 @@
             const data = await response.json();
             
             allViolations = data.violations || [];
-            
             isStatsLoaded = true;
             document.getElementById('reportLoading').style.display = 'none';
             
@@ -482,8 +483,12 @@
         document.getElementById('topViolatorCount').innerText = topViolator.count;
     }
 
+    // --- الاستراتيجية الجديدة كلياً لتوليد الـ PDF ---
     function generateDriverPDF(event, driverName, driverPhone) {
-        if(event) event.preventDefault(); // إيقاف سلوك تحديث الصفحة الإجباري
+        if(event) {
+            event.preventDefault(); 
+            event.stopPropagation(); // يمنع التحديث القطعي للصفحة
+        }
 
         const startVal = document.getElementById('filterStartDate').value;
         const endVal = document.getElementById('filterEndDate').value;
@@ -511,9 +516,8 @@
         else if (startVal) periodText = `من ${startVal} وحتى تاريخه`;
         else if (endVal) periodText = `حتى تاريخ ${endVal}`;
 
-        // الحل الجذري للصفحة البيضاء: تحويل الكود إلى نص HTML مقروء مباشرة لمكتبة PDF
         const htmlContent = `
-            <div style="padding: 30px; direction: rtl; font-family: 'Tajawal', sans-serif; background: #fff; width: 100%; box-sizing: border-box;">
+            <div style="padding: 20px; direction: rtl; font-family: 'Tajawal', sans-serif; background: #fff; width: 100%; box-sizing: border-box;">
                 <div style="text-align: center; border-bottom: 3px solid #D4AF37; padding-bottom: 15px; margin-bottom: 20px;">
                     <h1 style="color: #D4AF37; margin: 0 0 5px 0;">نعاون لخدمات التوصيل</h1>
                     <h3 style="margin: 0; color: #333;">كشف بالمخالفات المفصلة للمندوب</h3>
@@ -524,7 +528,7 @@
                     <p style="margin: 3px 0;"><strong>رقم هاتف المندوب:</strong> ${driverPhone || 'غير متوفر'}</p>
                     <p style="margin: 3px 0;"><strong>نطاق الفترة الزمنية:</strong> ${periodText}</p>
                     <p style="margin: 3px 0;"><strong>إجمالي عدد المخالفات:</strong> ${driverViolations.length}</p>
-                    <p style="margin: 3px 0; color: #e74c3c; font-weight: bold;"><strong>إجمالي المبالغ والغرامات المستحقة:</strong> ${totalFines.toFixed(3)} ر.ع</p>
+                    <p style="margin: 3px 0; color: #e74c3c; font-weight: bold;"><strong>إجمالي الغرامات المستحقة:</strong> ${totalFines.toFixed(3)} ر.ع</p>
                 </div>
 
                 <table style="width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px;">
@@ -533,7 +537,7 @@
                             <th style="border: 1px solid #ddd; padding: 10px; text-align: right;">التاريخ</th>
                             <th style="border: 1px solid #ddd; padding: 10px; text-align: right;">نوع المخالفة</th>
                             <th style="border: 1px solid #ddd; padding: 10px; text-align: right;">مبلغ الغرامة</th>
-                            <th style="border: 1px solid #ddd; padding: 10px; text-align: right;">الملاحظات الإدارية</th>
+                            <th style="border: 1px solid #ddd; padding: 10px; text-align: right;">الملاحظات</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -547,23 +551,32 @@
                         `).join('')}
                     </tbody>
                 </table>
-
                 <div style="margin-top: 40px; text-align: right; font-size: 11px; color: #999; border-top: 1px dashed #ddd; padding-top: 10px;">
                     <p>تم استخراج هذا المستند إلكترونياً من النظام الإداري الموحد لفريق نعاون.</p>
-                    <p>تاريخ الطباعة والاستخراج: ${new Date().toLocaleDateString('ar-OM')}</p>
                 </div>
             </div>
         `;
 
+        // إنشاء حاوية وهمية في الشاشة لضمان قراءة المكتبة لها وتجنب الصفحة البيضاء
+        const tempContainer = document.createElement('div');
+        tempContainer.style.position = 'absolute';
+        tempContainer.style.left = '-9999px';
+        tempContainer.style.top = '0';
+        tempContainer.style.width = '800px';
+        tempContainer.innerHTML = htmlContent;
+        document.body.appendChild(tempContainer);
+
         const opt = {
-            margin:       [10, 10, 10, 10], // إضافة هوامش لحماية التقرير من القص
-            filename:     `تقرير_مخالفات_المندوب_${driverName}.pdf`,
+            margin:       10,
+            filename:     `تقرير_مخالفات_${driverName}.pdf`,
             image:        { type: 'jpeg', quality: 1 },
             html2canvas:  { scale: 2, useCORS: true },
             jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
-        html2pdf().set(opt).from(htmlContent).save();
+        html2pdf().set(opt).from(tempContainer).save().then(() => {
+            document.body.removeChild(tempContainer); // تنظيف بعد التحميل
+        });
     }
 
     function switchTab(tabId) {
@@ -578,7 +591,6 @@
             document.querySelectorAll('.tab-btn')[1].classList.add('active');
         }
         
-        // تخزين التبويب الحالي في الذاكرة
         localStorage.setItem('activeTab_nawen', tabId);
         
         if(tabId === 'reportTab' && !isStatsLoaded) {
@@ -626,10 +638,7 @@
         };
 
         try {
-            const response = await fetch(GAS_URL, {
-                method: 'POST',
-                body: JSON.stringify(payload)
-            });
+            const response = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
             const result = await response.json();
             
             if(result.status === 'success') {
@@ -649,10 +658,13 @@
     });
 
     function generatePDF(event) {
-        if(event) event.preventDefault(); // إيقاف تحديث الصفحة للتقرير العام
+        if(event) {
+            event.preventDefault(); 
+            event.stopPropagation();
+        }
         const element = document.getElementById('reportContent');
         const opt = {
-            margin:       [10, 10, 10, 10], // إضافة هوامش لحماية التقرير من القص
+            margin:       10,
             filename:     'تقرير_مخالفات_نعاون_العام.pdf',
             image:        { type: 'jpeg', quality: 1 },
             html2canvas:  { scale: 2, useCORS: true },
